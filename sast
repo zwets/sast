@@ -119,13 +119,10 @@ Usage: $PROGNAME [OPTIONS] [ALLELES|-] [GENOME ...]
   for its gene profile.
 
   OPTIONS
-  #TODO -m, --mode MODE       MODE \"mlst\", \"ident\", or \"profile\" (see README.md)
   -t, --table TABLE     Map allele combinations on the STs specified in TABLE
   -j, --join OUTPUT     Join output of this run to OUTPUT of previous run
   -i, --identity IDENT  Minimum percentage identity (default $PCT_IDENT)
   -c, --coverage COVER  Minimum percentage of allele covered (default $PCT_COVER)
-  #TODO  -a, --all             Report all alleles meeting PCT and COV (default 1)
-  #TODO  -x, --extract-genes   Extract the alleles found in GENOMES to a FASTA file
   -p, --proc[essors] N  Use N processors (default \`nproc --ignore=1\` = $NPROC) 
   -v, --verbose         Report progress on stderr
 
