@@ -18,12 +18,20 @@
 #
 #  Home: https://github.com/zwets/sast
 
+# Make sure sort and awk run predictably and fast
+export LC_ALL="C"
+
 # Constants
 PROGNAME="$(basename "$0")"
+SAST_DB="sast-db"
+SEQID_FILE="${SAST_DB}.seqids"
+TAB="$(printf '\t')"
 
 # Parameters
 PCT_IDENT="100"
 PCT_COVER="80"
+ALLELES="-"
+NPROC="$(nproc --ignore=1 2>/dev/null || echo 1)"
 
 # Function exits this script with $* on stderr
 err_exit() {
@@ -36,26 +44,92 @@ emit() {
     [ -z "$VERBOSE" ] || echo "${PROGNAME}: $*" >&2
 }
 
+# Function either un(bxg)zips or cats "$1"
+maybe_decompress() {
+    case "$(file --brief --mime-type "$1")" in
+        application/gzip)    gzip -dc "$1" ;;
+        application/x-xz)    xz -dc "$1" ;;
+        application/x-bzip2) bzip2 -dc "$1" ;;
+        *) cat "$1" ;;
+    esac
+    }
+
+# Function creates the SAST_DB and SEQID_FILE from genome files $*
+create_database() {
+    local tmp_seqid_file="${SEQID_FILE}.tmp"
+
+    emit "creating database: $SAST_DB"
+    rm -f ${SAST_DB}.n??
+    echo "#Seqid" > "${tmp_seqid_file}"
+
+    # Rewrite the sequence headers so their seqid matches basename of the file
+    while [ $# -ne 0 ]; do
+        # Obtain genome identifier by stripping extension(s) from the fasta file 
+        S="$(echo "$(basename "$1")" | sed -re 's/^(.*)(\.fn?a?s?t?a?(\.gz|\.bz2|\.xz)?)/\1/')"
+
+        emit "adding genome: $S"
+        echo "$S" >> "${tmp_seqid_file}"
+        maybe_decompress "$1" | sed -re 's/^>(.*)/>'$S' \1/'
+        shift
+
+    done | makeblastdb -input_type fasta -dbtype nucl -out ${SAST_DB} -title "${SAST_DB}" >/dev/null
+
+    # Sort the seqid file else no joining
+    emit "creating seqid file: $SEQID_FILE"
+    sort "${tmp_seqid_file}" > "$SEQID_FILE"
+    rm -f "${tmp_seqid_file}"
+    }
+
+# BLAST output format specifier and column offsets
+#BLAST_OUTFMT="6 qacc qstart qend qlen sacc sstart send length evalue pident bitscore qcovs qcovhsp nident gapopen gaps mismatch stitle sseq"
+##             $ 1    2      3    4    5    6      7    8      9      10     11       12    13      14     15      16   17       18     19
+BLAST_OUTFMT="6 sacc qacc pident qcovs"
+#             $ 1    2    3      4
+
+# Function to perform the BLAST query; args $* are added to its end
+blast_query() {
+    blastn -db "$SAST_DB" -task blastn -num_threads "$NPROC" -parse_deflines \
+           -perc_identity "$PCT_IDENT" -qcov_hsp_perc "$PCT_COVER" \
+           -query "$ALLELES" -outfmt "$BLAST_OUTFMT" $*
+    }
+
+# Function to process the BLAST output, splitting the allele in columns "Gene" and "Allele"
+process_output() {
+    awk -bO 'BEGIN { OFS=FS="\t" }
+                   { match($2, "^(.*)[^0-9]([0-9]+)$", A); print $1, A[1], A[2] ($3<100.0?"*":""), $3, $4 }' |
+    sort -t "$TAB" -k 1,2 -k 4,4nr -k 5,5nr |
+    sort -t "$TAB" -k 1,2 -u |
+    awk -bO -f "$(dirname "$0")/pivot-eav-table.awk" |
+    sort -k1
+    }
+
+
 # Function to show usage information and exit
 usage_exit() {
     echo "
-Usage: $PROGNAME [OPTIONS] [-t TABLE ...] -a ALLELES ... [-g GENOME ... | -d DB]
+Usage: $PROGNAME [OPTIONS] [ALLELES|-] [GENOME ...]
 
-  Look for each allele from ALLELES in each GENOME or in all genomes in DB.
+  Look for each allele from file ALLELES in each GENOME file.  If ALLELES is
+  absent or '-' read alleles from stdin.  If no GENOMEs are given, search the
+  sequences in BLASTDB.
+
   Output a table listing for each genome, for each gene, the allele found,
-  or the closest match that meets IDENT and COVER.  For any TABLE specified,
-  add a column listing the ST looked up in TABLE by the allele combination
+  or the closest match that meets IDENT and COVER.  If TABLE is specified,
+  prepend a column listing the ST looked up in TABLE by the allele combination
   for its gene profile.
 
   OPTIONS
-  -t, --table TABLE ..  Specify one or more the sequence type mapping TABLEs
+  #TODO -m, --mode MODE       MODE \"mlst\", \"ident\", or \"profile\" (see README.md)
+  -t, --table TABLE     Map allele combinations on the STs specified in TABLE
+  -j, --join OUTPUT     Join output of this run to OUTPUT of previous run
   -i, --identity IDENT  Minimum percentage identity (default $PCT_IDENT)
   -c, --coverage COVER  Minimum percentage of allele covered (default $PCT_COVER)
-  -m, --multiple        Report all alleles meeting PCT and COV (default 1)
-  -x, --extract-genes   Extract the alleles found to a FA
-  -d, --db BLASTDB      Instead of GENOME files use BLASTDB as source
+  #TODO  -a, --all             Report all alleles meeting PCT and COV (default 1)
+  #TODO  -x, --extract-genes   Extract the alleles found in GENOMES to a FASTA file
+  -p, --proc[essors] N  Use N processors (default \`nproc --ignore=1\` = $NPROC) 
+  -v, --verbose         Report progress on stderr
 
-  Each ALLELES file must be FASTA, and may list any number of alleles for any
+  The ALLELES file must be FASTA, and may list any number of alleles for any
   number of genes.  Each allele must have a sequence header with format
   '>GDN X', where G is the gene name (a sequence of arbitrary characters),
   D is a delimiter (any single non-numeric character), and N is the allele
@@ -69,7 +143,7 @@ Usage: $PROGNAME [OPTIONS] [-t TABLE ...] -a ALLELES ... [-g GENOME ... | -d DB]
   contigs.  Its file name minus extension is used as the genome identifier in
   $PROGNAME's output.  If your file names are ugly, ln(1) is there for you.
   
-  Each TABLE must be a TSV file whose first column gives the ST identifier (any
+  TABLE must be a TSV file whose first column gives the ST identifier (any
   string of characters), for the allele number combination in the remaining
   columns.  Its header must specify the gene name corresponding to each column.
   Its first column header (e.g. \"ST\") is used as column header in the output.
@@ -79,6 +153,55 @@ Usage: $PROGNAME [OPTIONS] [-t TABLE ...] -a ALLELES ... [-g GENOME ... | -d DB]
 
 # Parse options
 
-err_exit "under construction"
+unset TABLE VERBOSE JOIN_TO 
+while [ $# -ne 0 -a "$(expr "$1" : '\(.\)..*')" = "-" ]; do
+    case $1 in
+    --table=*)      TABLE="${1##--table=}" ;;
+    -t|--table)     shift || usage_exit; TABLE="$1" ;;
+    --join=*)       JOIN_TO="${1##--join=}" ;;
+    -j|--join)      shift || usage_exit; JOIN_TO="$1" ;;
+    --ident*=*)     PCT_IDENT="${1##--ident*=}" ;;
+    -i|--ident*)    shift || usage_exit; PCT_IDENT="$1" ;;
+    --cover*=*)     PCT_COVER="${1##--cover*=}" ;;
+    -c|--cover*)    shift || usage_exit; PCT_COVER="$1" ;;
+    --proc*=*)      NPROC="${1##--proc*=}" ;;
+    -p|--proc*)     shift || usage_exit; NPROC="$1" ;;
+    -v|--verbose)   VERBOSE=1 ;;
+    -h|--help)      usage_exit 0 ;;
+    *)              usage_exit ;;
+    esac
+    shift
+done
+
+# Check options
+
+[ -z "$TABLE" ] || [ -f "$TABLE" ] || err_exit "no such file: $TABLE"
+[ -z "$JOIN_TO" ] || [ -f "$JOIN_TO" ] || err_exit "no such file: $JOIN_TO"
+
+# Parse args (note all are optional)
+
+if [ $# -ge 1 ]; then
+
+    ALLELES="$1"
+    shift
+
+    if [ $# -ge 1 ]; then
+        create_database "$@"
+    elif [ ! -f "${SAST_DB}.nhr" ]; then
+        err_exit "no genomes specified and no database '$SAST_DB'"
+    else
+        emit "reusing database $SAST_DB"
+    fi
+fi
+
+# Check coherence
+
+[ "$ALLELES" = "-" ] || [ -f "$ALLELES" ] || err_exit "alleles file not found: $ALLELES"
+emit "reading alleles from: $ALLELES"
+
+# Perform the blast(s)
+
+emit "performing BLAST"
+blast_query | process_output | join --header -o auto -a 1 -t "$TAB" ${JOIN_TO:-$SEQID_FILE} -
 
 # vim: sts=4:sw=4:et:si:ai
