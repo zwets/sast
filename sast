@@ -46,7 +46,7 @@ emit() {
 
 # Function either un(bxg)zips or cats "$1"
 maybe_decompress() {
-    case "$(file --brief --mime-type "$1")" in
+    case "$($FILE_EXE --brief --mime-type "$1")" in
         application/gzip)    gzip -dc "$1" ;;
         application/x-xz)    xz -dc "$1" ;;
         application/x-bzip2) bzip2 -dc "$1" ;;
@@ -65,14 +65,14 @@ create_database() {
     # Rewrite the sequence headers so their seqid matches basename of the file
     while [ $# -ne 0 ]; do
         # Obtain genome identifier by stripping extension(s) from the fasta file 
-        S="$(echo "$(basename "$1")" | sed -re 's/^(.*)(\.fn?a?s?t?a?(\.gz|\.bz2|\.xz)?)/\1/')"
+        S="$(echo "$(basename "$1")" | $SED_EXE -re 's/^(.*)(\.fn?a?s?t?a?(\.gz|\.bz2|\.xz)?)/\1/')"
 
         emit "adding genome: $S"
         echo "$S" >> "${tmp_seqid_file}"
-        maybe_decompress "$1" | sed -re 's/^>(.*)/>'$S' \1/'
+        maybe_decompress "$1" | $SED_EXE -re 's/^>(.*)/>'$S' \1/'
         shift
 
-    done | makeblastdb -input_type fasta -dbtype nucl -out ${SAST_DB} -title "${SAST_DB}" >/dev/null
+    done | $MAKEBLASTDB_EXE -input_type fasta -dbtype nucl -out ${SAST_DB} -title "${SAST_DB}" >/dev/null
 
     # Sort the seqid file else no joining
     emit "creating seqid file: $SEQID_FILE"
@@ -88,18 +88,18 @@ BLAST_OUTFMT="6 sacc qacc pident qcovs"
 
 # Function to perform the BLAST query; args $* are added to its end
 blast_query() {
-    blastn -db "$SAST_DB" -task blastn -num_threads "$NPROC" -parse_deflines \
+    $BLASTN_EXE -db "$SAST_DB" -task blastn -num_threads "$NPROC" -parse_deflines \
            -perc_identity "$PCT_IDENT" -qcov_hsp_perc "$PCT_COVER" \
            -query "$ALLELES" -outfmt "$BLAST_OUTFMT" $*
     }
 
 # Function to process the BLAST output, splitting the allele in columns "Gene" and "Allele"
 process_output() {
-    awk -bO 'BEGIN { OFS=FS="\t" }
+    $GAWK_EXE -bO 'BEGIN { OFS=FS="\t" }
                    { match($2, "^(.*)[^0-9]([0-9]+)$", A); print $1, A[1], A[2] ($3<100.0?"*":""), $3, $4 }' |
     sort -t "$TAB" -k 1,2 -k 4,4nr -k 5,5nr |
     sort -t "$TAB" -k 1,2 -u |
-    awk -bO -f "$(dirname "$0")/pivot-eav-table.awk" |
+    $GAWK_EXE -bO -f "$(dirname "$0")/pivot-eav-table.awk" |
     sort -k1
     }
 
@@ -151,6 +151,23 @@ Usage: $PROGNAME [OPTIONS] [ALLELES|-] [GENOME ...]
     exit ${1:-1}
 }
 
+# Check dependencies
+
+checked_dep() {
+    local EXE="${1:-$(which "$2")}"
+    local VAR="$(echo "SAST_$2" | tr 'a-z' 'A-Z')"
+    [ -x "$EXE" ] && echo "$EXE" || 
+        err_exit "no such executable: $2.\nInstall $2 and/or set $VAR to its location."
+}
+
+export \
+    FILE_EXE="$(checked_dep "$SAST_FILE" 'file')" \
+    GAWK_EXE="$(checked_dep "$SAST_GAWK" 'gawk')" \
+    SED_EXE="$(checked_dep "$SAST_SED" 'sed')" \
+    BLASTN_EXE="$(checked_dep "$SAST_BLASTN" 'blastn')" \
+    MAKEBLASTDB_EXE="$(checked_dep "$SAST_MAKEBLASTDB" 'makeblastdb')" \
+    || exit 1
+
 # Parse options
 
 unset TABLE VERBOSE JOIN_TO 
@@ -194,12 +211,12 @@ if [ $# -ge 1 ]; then
     fi
 fi
 
-# Check coherence
+# Check args
 
 [ "$ALLELES" = "-" ] || [ -f "$ALLELES" ] || err_exit "alleles file not found: $ALLELES"
 emit "reading alleles from: $ALLELES"
 
-# Perform the blast(s)
+# And finally the one-liner to do everything!
 
 emit "performing BLAST"
 blast_query | process_output | join --header -o auto -a 1 -t "$TAB" ${JOIN_TO:-$SEQID_FILE} -
