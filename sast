@@ -25,6 +25,7 @@ export LC_ALL="C"
 PROGNAME="$(basename "$0")"
 SAST_DB="sast-db"
 SEQID_FILE="${SAST_DB}.seqids"
+LAST_OUTPUT="${SAST_DB}.last.tsv"
 TAB="$(printf '\t')"
 
 # Parameters
@@ -59,7 +60,7 @@ create_database() {
     local tmp_seqid_file="${SEQID_FILE}.tmp"
 
     emit "creating database: $SAST_DB"
-    rm -f ${SAST_DB}.n??
+    rm -f ${SAST_DB}.n?? "${SEQID_FILE}"
     echo "#seqid" > "${tmp_seqid_file}"
 
     # Rewrite the sequence headers so their seqid matches basename of the file
@@ -93,13 +94,19 @@ blast_query() {
            -query "$ALLELES" -outfmt "$BLAST_OUTFMT" $*
     }
 
-# Function to process the BLAST output, splitting the allele in columns "Gene" and "Allele"
+# Function to process the BLAST output, splitting the allele in columns "Gene" and "Allele",
+# then sorting on decreasing pident,coverage within unique genome+gene combination
+# then keeping the top row per unique genome+gene combination
+# then pivoting these from EAV to an ExA matrix with the V in the cells
+# then joining these with the mapping table
 process_output() {
-    $GAWK_EXE -bO 'BEGIN { OFS=FS="\t" }
-                   { match($2, "^(.*)[^0-9]([0-9]+)$", A); print $1, A[1], A[2] ($3<100.0?"*":""), $3, $4 }' |
+    $GAWK_EXE -bO '
+        BEGIN { OFS=FS="\t" }
+              { match($2, "^(.*)[^0-9]([0-9]+)$", A); print $1, A[1], A[2] ($3<100.0?"*":""), $3, $4 }' |
     sort -t "$TAB" -k 1,2 -k 4,4nr -k 5,5nr |
     sort -t "$TAB" -k 1,2 -u |
     $GAWK_EXE -bO -f "$(dirname "$0")/pivot-eav-table.awk" |
+    if [ -n "$TABLE" ]; then $GAWK_EXE -bO -v LHS_FILE="$TABLE" -f "$(dirname "$0")/join-tables.awk"; else cat; fi |
     sort -k1
     }
 
@@ -113,18 +120,19 @@ Usage: $PROGNAME [OPTIONS] [ALLELES|-] [GENOME ...]
   absent or '-' read alleles from stdin.  If no GENOMEs are given, reuse the
   set from the previous run.
 
-  Output a table listing for each genome, for each gene, the allele found,
-  or the closest match that meets IDENT and COVER.  If TABLE is specified,
-  prepend a column listing the ST looked up in TABLE by the allele combination
-  for its gene profile.
+  Produce a table listing for each genome, for each gene, the allele found, or
+  the closest match that meets IDENT and COVER.  If TABLE is specified, use it
+  to look up the ST for each allele combination, and prepend it to each row.
 
   OPTIONS
-  -t, --table TABLE     Map allele combinations on the STs specified in TABLE
-  -j, --join OUTPUT     Join output of this run to OUTPUT of previous run
+
+  -t, --table TABLE  Table mapping allele combinations onto STs (see below)
   -i, --identity IDENT  Minimum percentage identity (default $PCT_IDENT)
   -c, --coverage COVER  Minimum percentage of allele covered (default $PCT_COVER)
   -p, --proc[essors] N  Use N processors (default \`nproc --ignore=1\` = $NPROC) 
   -v, --verbose         Report progress on stderr
+
+  FILE FORMATS
 
   The ALLELES file must be FASTA, and may list any number of alleles for any
   number of genes.  Each allele must have a sequence header with format
@@ -138,12 +146,16 @@ Usage: $PROGNAME [OPTIONS] [ALLELES|-] [GENOME ...]
 
   Each GENOME file must be (optionally compressed) FASTA containing assembled
   contigs.  Its file name minus extension is used as the genome identifier in
-  $PROGNAME's output.  If your file names are ugly, ln(1) is for you.
-  
-  TABLE must be a TSV file whose first column gives the ST identifier (any
-  string of characters), for the allele number combination in the remaining
-  columns.  Its header must specify the gene name corresponding to each column.
-  Its first column header (e.g. \"ST\") is used as column header in the output.
+  $PROGNAME output.  If your file names are ugly, ln(1) is for you.
+
+  TABLE must be a TSV with one column having the ST, and the remaining columns
+  the allele combination corresponding to the ST.  Its header must specify the
+  gene name corresponding to each column.  The ST column can have any name.
+  Column order is arbitrary and determines the column order in the output.
+ 
+  Note: TABLE can actually have any number of columns, any subset of which may
+  match any subset of the gene profile.  The final output is simply the natural
+  right join of TABLE and the table of detected alleles.
 
   For more information, see https://github.com/zwets/sast.
 " >&2
@@ -194,10 +206,6 @@ done
 [ -z "$TABLE" ] || [ -f "$TABLE" ] || err_exit "no such file: $TABLE"
 [ -z "$JOIN_TO" ] || [ -f "$JOIN_TO" ] || err_exit "no such file: $JOIN_TO"
 
-# TEMP (until fixed)
-
-[ -z "$TABLE" ] || err_exit "option --table is under reconstruction"
-
 # Parse args (note all are optional)
 
 if [ $# -ge 1 ]; then
@@ -222,6 +230,9 @@ emit "reading alleles from: $ALLELES"
 # And finally the one-liner to do everything!
 
 emit "performing BLAST"
-blast_query | process_output | join --header -o auto -a 1 -t "$TAB" ${JOIN_TO:-$SEQID_FILE} - | tee "last-output.tab"
+blast_query | 
+process_output | 
+join --header -o auto -a 1 -t "$TAB" ${JOIN_TO:-$SEQID_FILE} - | 
+tee "$LAST_OUTPUT"
 
 # vim: sts=4:sw=4:et:si:ai
