@@ -60,7 +60,7 @@ create_database() {
 
     emit "creating database: $SAST_DB"
     rm -f ${SAST_DB}.n??
-    echo "#Seqid" > "${tmp_seqid_file}"
+    echo "#seqid" > "${tmp_seqid_file}"
 
     # Rewrite the sequence headers so their seqid matches basename of the file
     while [ $# -ne 0 ]; do
@@ -138,7 +138,7 @@ Usage: $PROGNAME [OPTIONS] [ALLELES|-] [GENOME ...]
 
   Each GENOME file must be (optionally compressed) FASTA containing assembled
   contigs.  Its file name minus extension is used as the genome identifier in
-  $PROGNAME's output.  If your file names are ugly, ln(1) is there for you.
+  $PROGNAME's output.  If your file names are ugly, ln(1) is for you.
   
   TABLE must be a TSV file whose first column gives the ST identifier (any
   string of characters), for the allele number combination in the remaining
@@ -222,6 +222,6 @@ emit "reading alleles from: $ALLELES"
 # And finally the one-liner to do everything!
 
 emit "performing BLAST"
-blast_query | process_output | join --header -o auto -a 1 -t "$TAB" ${JOIN_TO:-$SEQID_FILE} -
+blast_query | process_output | join --header -o auto -a 1 -t "$TAB" ${JOIN_TO:-$SEQID_FILE} - | tee "last-output.tab"
 
 # vim: sts=4:sw=4:et:si:ai
