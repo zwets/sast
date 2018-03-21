@@ -25,6 +25,13 @@ NR == 1 { # Process the RHS header line
 		if ((J = RC[$I])) { LJ[++Z] = I; RJ[Z] = J }	# Store join column Z's indices
 	  }
 
+	  # Print the output header - first RHS free, then LHS free, then join columns
+	  printf RH[1]
+	  for (J=2; J<=length(RH); ++J) if (!LC[RH[J]]) printf OFS RH[J]
+	  for (I=1; I<=length(LH); ++I) if (!RC[LH[I]]) printf OFS LH[I]
+	  for (J=2; J<=length(RH); ++J) if ( LC[RH[J]]) printf OFS RH[J]
+	  printf RS
+
 	  # Process the rest of LHS
 	  while (getline <LHS_FILE) {
 		KEY = ""
@@ -32,12 +39,6 @@ NR == 1 { # Process the RHS header line
 		if (LHS[KEY]) { print "Non-unique key. Duplicate value is " $0 >"/dev/stderr"; exit 1 } 
 		LHS[KEY]=$0
 	  }
-
-	  # Print the output header
-	  printf $1
-	  for (I=1; I<=length(LH); ++I) printf OFS LH[I]
-	  for (J=2; J<=NF; ++J) if (!(LC[RH[J]])) printf OFS $J
-	  printf RS
 	}
 
 NR > 1	{ # Process RHS table coming in on stdin, taking care of stars
@@ -57,21 +58,11 @@ NR > 1	{ # Process RHS table coming in on stdin, taking care of stars
 	  LL[1]=0; delete LL[1]	# Idiom hack to define array
 	  if (L) split(L, LL)	# Else split fails
 
-	  # Print out the RHS first column first (it is the genome ID)
+	  # Print the line - RHS free, then LHS free, then joined columns
 	  printf $1
-
-	  # Print out the LHS columns but use RHS values on join columns
-	  for (I=1; I<=length(LH); ++I) {
-		printf OFS
-		RI = RC[LH[I]]
-		printf RI ? $RI : L ? LL[I] STARS : "NF"
-	  }
-
-	  # Print out the RHS columns which haven't been printed yet
-	  for (J=2; J<=length(RH); ++J) {
-		if (!(LC[RH[J]])) printf OFS $J
-	  }
-
+	  for (J=2; J<=length(RH); ++J) if (!LC[RH[J]]) printf OFS $J
+	  for (I=1; I<=length(LH); ++I) if (!RC[LH[I]]) printf OFS (L ? LL[I] STARS : "NF")
+	  for (J=2; J<=length(RH); ++J) if ( LC[RH[J]]) printf OFS $J
 	  printf RS
 	}
 

@@ -154,8 +154,8 @@ Usage: $PROGNAME [OPTIONS] [ALLELES|-] [GENOME ...]
   Column order is arbitrary and determines the column order in the output.
  
   Note: TABLE can actually have any number of columns, any subset of which may
-  match any subset of the gene profile.  The final output is simply the natural
-  right join of TABLE and the table of detected alleles.
+  match any subset of the gene profile, provided the join is unique.  The final
+  output is simply the natural join of the table of detected alleles and TABLE.
 
   For more information, see https://github.com/zwets/sast.
 " >&2
