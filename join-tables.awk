@@ -61,7 +61,7 @@ NR > 1	{ # Process RHS table coming in on stdin, taking care of stars
 	  # Print the line - RHS free, then LHS free, then joined columns
 	  printf $1
 	  for (J=2; J<=length(RH); ++J) if (!LC[RH[J]]) printf OFS $J
-	  for (I=1; I<=length(LH); ++I) if (!RC[LH[I]]) printf OFS (L ? LL[I] STARS : "NF")
+	  for (I=1; I<=length(LH); ++I) if (!RC[LH[I]]) printf OFS (L ? LL[I] : "NF") STARS
 	  for (J=2; J<=length(RH); ++J) if ( LC[RH[J]]) printf OFS $J
 	  printf RS
 	}
