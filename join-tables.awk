@@ -13,6 +13,7 @@
 
 BEGIN	{ FS = OFS = "\t"
 	  Z = 0
+	  LARR[1]=0; delete LARR[1]	# Idiom hack to define array, needed for split
 	}
 
 NR == 1 { # Process the RHS header line
@@ -36,7 +37,14 @@ NR == 1 { # Process the RHS header line
 	  while (getline <LHS_FILE) {
 		KEY = ""
 		for (K=1; K<=Z; ++K) KEY = KEY SUBSEP $(LJ[K])
-		if (LHS[KEY]) { print "Non-unique key. Duplicate value is " $0 >"/dev/stderr"; exit 1 } 
+		if (LHS[KEY]) { printf \
+		  "Problem: duplicate entry in lookup table '" LHS_FILE "'. " \
+		  "Either this is an actual duplicate, or some gene in the lookup table was not " \
+		  "found in any of the sequences (and typing fails by definition). Genes found were:" >"/dev/stderr"
+		  for (J=2; J<=length(RH); ++J) if (LC[RH[J]]) printf " " RH[J] >"/dev/stderr"
+		  printf "\n" >"/dev/stderr"
+		  exit 1
+		}
 		LHS[KEY]=$0
 	  }
 	}
@@ -55,13 +63,12 @@ NR > 1	{ # Process RHS table coming in on stdin, taking care of stars
 
 	  # Look up and split the LHS entry into fields
 	  L = LHS[KEY]
-	  LL[1]=0; delete LL[1]	# Idiom hack to define array
-	  if (L) split(L, LL)	# Else split fails
+	  if (L) split(L, LARR)
 
 	  # Print the line - RHS free, then LHS free, then joined columns
 	  printf $1
 	  for (J=2; J<=length(RH); ++J) if (!LC[RH[J]]) printf OFS $J
-	  for (I=1; I<=length(LH); ++I) if (!RC[LH[I]]) printf OFS (L ? LL[I] : "NF") STARS
+	  for (I=1; I<=length(LH); ++I) if (!RC[LH[I]]) printf OFS (L ? LARR[I] : "NF") STARS
 	  for (J=2; J<=length(RH); ++J) if ( LC[RH[J]]) printf OFS $J
 	  printf RS
 	}
