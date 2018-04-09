@@ -11,7 +11,7 @@ detected haplotype onto phenotypic categories.
 MLST looks for a tuple of exact allele matches for a defined set of genes, then
 maps this tuple onto the ST for the genome.  If no exact match is found for some
 gene in the profile, or if all genes match but the tuple does not map onto a
-defined ST, then we have a new (unknown) ST.
+defined ST, then we have a novel (unknown) ST.
 
 Identification is essentially the same procedure, except that usually a single
 gene (across multiple taxa) is used, and there is no 100% identity requirement.
@@ -41,15 +41,17 @@ set, as `sast` will reuse the BLAST database that it generated the first time.
 
 > **Caveat Emptor**
 >
-> `sast` operates on assemblies, not on reads.  Reads will generally give more
-> accurate results.  If you have reads (and time), then you should be using the
-> excellent [SRST2](https://github.com/katholt/srst2).
+> `sast` operates on assemblies, not on reads.  This works fine if the assembly
+> has good coverage and read depth, and (hence) is not overly fragmented.  If
+> these conditions aren't met, then mapping reads on the query set is likely to
+> give more accurate results.  [SRST2](https://github.com/katholt/srst2) is the
+> perfect tool to do just that.
 
 
 ## Installation
 
 Apart from `blastn` and `makeblastdb`, `sast` uses software that is present on
-any decent GNU system, and on most POSIX systems.  You may need to install:
+any GNU system, and most POSIX systems.  You may need to install:
 
 * `gawk` (GNU awk), and/or set environment variable `SAST_GAWK` to its location
 * `sed`, and/or set environment variable `SAST_SED` to its location
@@ -86,7 +88,7 @@ The ALLELES file must be FASTA, and may list any number of alleles for any
 number of genes.  Each allele must have a sequence header with format
 '>GDN X', where G is the gene name (a sequence of arbitrary characters),
 D is a delimiter (any single non-numeric character), and N is the allele
-number (unique among all alleles for G).  X is optional arbitrary text.
+number (numeric and unique relative to G).  X is optional arbitrary text.
 
 This convention means that you can use most standard allele files (e.g. from
 PubMLST or Pasteur, or those that work with SRST2) without modification.
