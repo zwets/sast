@@ -95,7 +95,7 @@ blast_query() {
     }
 
 # Function to process the BLAST output, splitting the allele in columns "Gene" and "Allele",
-# then sorting on decreasing pident,coverage within unique genome+gene combination
+# then sorting on decreasing coverage,pident within unique genome+gene combination
 # then keeping the top row per unique genome+gene combination
 # then pivoting these from EAV to an ExA matrix with the V in the cells
 # then joining these with the mapping table
@@ -103,7 +103,7 @@ process_output() {
     $GAWK_EXE -bO '
         BEGIN { OFS=FS="\t" }
               { match($2, "^(.*)[^0-9]([0-9]+)$", A); print $1, A[1], A[2] ($3<100.0?"*":""), $3, $4 }' |
-    sort -t "$TAB" -k 1,2 -k 4,4nr -k 5,5nr |
+    sort -t "$TAB" -k 1,2 -k 5,5nr -k 4,4nr |
     sort -t "$TAB" -k 1,2 -u |
     $GAWK_EXE -bO -f "$(dirname "$0")/pivot-eav-table.awk" |
     if [ -n "$TABLE" ]; then $GAWK_EXE -bO -v LHS_FILE="$TABLE" -f "$(dirname "$0")/join-tables.awk"; else cat; fi |
@@ -126,9 +126,10 @@ Usage: $PROGNAME [OPTIONS] [ALLELES|-] [GENOME ...]
 
   OPTIONS
 
-  -t, --table TABLE  Table mapping allele combinations onto STs (see below)
+  -t, --table TABLE     Map allele combination onto ST using TABLE (see below)
   -i, --identity IDENT  Minimum percentage identity (default $PCT_IDENT)
   -c, --coverage COVER  Minimum percentage of allele covered (default $PCT_COVER)
+  -j, --join OUTPUT     Join output to previous OUTPUT table
   -p, --proc[essors] N  Use N processors (default \`nproc --ignore=1\` = $NPROC) 
   -v, --verbose         Report progress on stderr
 
