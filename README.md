@@ -42,7 +42,7 @@ set, as `sast` will reuse the BLAST database that it generated the first time.
 > **Caveat Emptor**
 >
 > `sast` operates on assemblies, not on reads.  This works fine if the assembly
-> has good coverage and read depth, and (hence) is not overly fragmented.  If
+> has good coverage and read depth, and hence is not overly fragmented.  If
 > these conditions aren't met, then mapping reads on the query set is likely to
 > give more accurate results.  [SRST2](https://github.com/katholt/srst2) is the
 > perfect tool to do just that.

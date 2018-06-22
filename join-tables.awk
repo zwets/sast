@@ -49,15 +49,14 @@ NR == 1 { # Process the RHS header line
 	  }
 	}
 
-NR > 1	{ # Process RHS table coming in on stdin, taking care of stars
+NR > 1	{ # Process RHS table coming in on stdin, taking care of stars and question marks
 	  STARS = ""
 	  KEY = ""
 	  for (K=1; K<=Z; ++K) {
 		V = $(RJ[K])
-		if ((S=index(V,"*")) != 0) { 
-			STARS = STARS "*"; 
-			V = substr(V, 1, S-1) 
-		}
+		if ((S=index(V,"*")) != 0) STARS = "*" STARS
+		if ((Q=index(V,"?")) != 0) STARS = STARS "?"
+		if (S || Q) V = substr(V, 1, (S ? S : Q) - 1)
 		KEY = KEY SUBSEP V
 	  }
 

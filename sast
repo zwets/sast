@@ -102,7 +102,7 @@ blast_query() {
 process_output() {
     $GAWK_EXE -bO '
         BEGIN { OFS=FS="\t" }
-              { match($2, "^(.*)[^0-9]([0-9]+)$", A); print $1, A[1], A[2] ($3<100.0?"*":""), $3, $4 }' |
+        { match($2, "^(.*)[^0-9]([0-9]+)$", A); print $1, A[1], A[2] ($3<100.0?"*":"") ($4<100.0?"?":""), $3, $4 }' |
     sort -t "$TAB" -k 1,2 -k 5,5nr -k 4,4nr |
     sort -t "$TAB" -k 1,2 -u |
     $GAWK_EXE -bO -f "$(dirname "$0")/pivot-eav-table.awk" |
@@ -123,6 +123,8 @@ Usage: $PROGNAME [OPTIONS] [ALLELES|-] [GENOME ...]
   Produce a table listing for each genome, for each gene, the allele found, or
   the closest match that meets IDENT and COVER.  If TABLE is specified, use it
   to look up the ST for each allele combination, and prepend it to each row.
+  Matches with less than 100% identity are marked with a '*'; matches covering
+  less than 100% of the allele are marked with a '?'.
 
   OPTIONS
 
