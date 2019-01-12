@@ -120,9 +120,9 @@ Usage: $PROGNAME [OPTIONS] [ALLELES|-] [GENOME ...]
   absent or '-' read alleles from stdin.  If no GENOMEs are given, reuse the
   set from the previous run.
 
-  Produce a table listing for each genome, for each gene, the allele found, or
-  the closest match that meets IDENT and COVER.  If TABLE is specified, use it
-  to look up the ST for each allele combination, and prepend it to each row.
+  Produce a table listing for each GENOME, for each gene in ALLELES, the allele
+  found, or the closest match meeting IDENT and COVER.  If TABLE is specified,
+  look up the ST for each allele combination, and prepend it to each row.
   Matches with less than 100% identity are marked with a '*'; matches covering
   less than 100% of the allele are marked with a '?'.
 
@@ -141,7 +141,7 @@ Usage: $PROGNAME [OPTIONS] [ALLELES|-] [GENOME ...]
   number of genes.  Each allele must have a sequence header with format
   '>GDN X', where G is the gene name (a sequence of arbitrary characters),
   D is a delimiter (any single non-numeric character), and N is the allele
-  number (unique among all alleles for G).  X is optional arbitrary text.
+  ID (numeric, unique among all alleles for G).  X is optional arbitrary text.
 
   This convention means that you can use most allele files (e.g. from PubMLST
   or Pasteur) unmodified, as e.g. 'rpoB_1', 'bla_OXA-15', or 'RS31795/1' all
